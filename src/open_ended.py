@@ -1,5 +1,39 @@
 from src.config.common_imports import *
-from src.config.settings import EXCLUDE_COLUMNS
+from src.config.settings import EXCLUDE_COLUMNS, BASE_DIR
+import yaml, re
+
+# 패턴 리스트 (정규식) - config 파일 읽기
+with open(BASE_DIR / 'src/config/noise_config.yaml', encoding="utf-8") as f:
+    noise_config = yaml.safe_load(f)
+
+# exact 응답 set
+EXACT_NOISE_RESPONSES = set(noise_config.get('exact', []))
+
+# 정규식 컴파일
+COMMON_NOISE_PATTERNS = [re.compile(p) for p in noise_config.get('regex_common', [])]
+INFO_ENTRY_NOISE_PATTERNS = [re.compile(p) for p in noise_config.get('regex_info_entry', [])]
+
+# 특수문자나 숫자만, 한글 자모만
+REGEX_PUNCT_OR_NUM = re.compile(r'^[\W\d_]+$')
+REGEX_HANGUL_JAMO = re.compile(r'^[ㄱ-ㅎㅏ-ㅣ]+$')
+MIN_LEN = 2
+
+def is_noise_extended(s: str, is_free: bool = False) -> bool:
+    s = str(s).strip()
+    if not s or len(s) < 2:
+        return True
+    if s in EXACT_NOISE_RESPONSES:
+        return True
+    if REGEX_PUNCT_OR_NUM.match(s) or REGEX_HANGUL_JAMO.match(s):
+        return True
+    for pattern in COMMON_NOISE_PATTERNS:
+        if pattern.match(s):
+            return True
+    if not is_free:
+        for pattern in INFO_ENTRY_NOISE_PATTERNS:
+            if pattern.match(s):
+                return True
+    return False
 
 def get_open_ended_columns(def_df: pd.DataFrame, df: pd.DataFrame):
     # 주관식 컬럼
@@ -17,69 +51,31 @@ def get_open_ended_columns(def_df: pd.DataFrame, df: pd.DataFrame):
 
 def summarize_etc(df: pd.DataFrame, def_df: pd.DataFrame) -> pd.DataFrame:
     results = []
-    text_cols, etc_cols = get_open_ended_columns(def_df, df)
-
+    _, etc_cols = get_open_ended_columns(def_df, df)
     for col in etc_cols:
-        q_txt = def_df.loc[def_df['column_id']==col.replace('_etc',''), '컬럼'].values[0] # 기존 질문 텍스트 : "컬럼"
-        ser = df[col].dropna().astype(str)
-        total = len(ser)
-        if total==0:
+        base_col = col.replace('_etc', '')
+        q_txt = def_df.loc[def_df['column_id'] == base_col, '컬럼'].values[0]
+
+        ser_full = df[col].dropna().astype(str)
+        vc = ser_full.value_counts()
+
+        total = len(ser_full)
+        if total == 0:
             continue
 
-        for resp, cnt in ser.value_counts().items():
+        for resp, cnt in vc.items():
             results.append({
                 'column_id': col,
                 'question':   f"{q_txt} (기타)",
                 'field':      'etc',
-                'response':   resp,
-                'count':      cnt,
-                'total':      total,
-                'pct':        cnt/total*100
+                'original_response': resp,
+                'is_noise':    is_noise_extended(resp),
+                'count':       cnt,
+                'total':       total,
+                'pct':         cnt / total * 100
             })
+
     return pd.DataFrame(results)
-
-
-# def summarize_text(df: pd.DataFrame, def_df: pd.DataFrame, top_n: int=10) -> pd.DataFrame:
-#     results = []
-#     text_cols, etc_cols = get_open_ended_columns(def_df, df)
-
-#     for col in text_cols:
-#         q_txt = def_df.loc[def_df['column_id']==col, '컬럼'].values[0]
-#         ser   = df[col].dropna().astype(str)
-#         total = len(ser)
-#         if total==0:
-#             continue
-
-#         # 1) 원문 상위 top_n
-#         for resp, cnt in ser.value_counts().head(top_n).items():
-#             results.append({
-#                 'column_id': col,
-#                 'question':   q_txt,
-#                 'field':      'text_top',
-#                 'response':   resp,
-#                 'count':      cnt,
-#                 'total':      total,
-#                 'pct':        cnt/total*100
-#             })
-
-#         # 2) 키워드 빈도 (CountVectorizer 예시)
-#         #    한글 분석은 별도 형태소분석기 적용 필요합니다
-#         vec = CountVectorizer(stop_words='english')
-#         X   = vec.fit_transform(ser)
-#         words = vec.get_feature_names_out()
-#         freqs = X.toarray().sum(axis=0)
-#         for word, cnt in sorted(zip(words, freqs), key=lambda x: -x[1])[:top_n]:
-#             results.append({
-#                 'column_id': col,
-#                 'question':   q_txt,
-#                 'field':      'keyword',
-#                 'response':   word,
-#                 'count':      int(cnt),
-#                 'total':      total,
-#                 'pct':        cnt/total*100
-#             })
-
-#     return pd.DataFrame(results)
 
 def summarize_text_simple(df: pd.DataFrame, def_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -91,30 +87,31 @@ def summarize_text_simple(df: pd.DataFrame, def_df: pd.DataFrame) -> pd.DataFram
         'column_id'
     ].tolist()
     
-    text_cols = [c for c in text_cols if c not in EXCLUDE_COLUMNS]
+    text_cols = [c for c in text_cols if c not in EXCLUDE_COLUMNS and c in df.columns]
 
     for col in text_cols:
-        if col not in df.columns:
-            continue
+        row = def_df.loc[def_df['column_id'] == col]
+        question_text = row['컬럼'].iat[0]
+        is_free_opinion = '자유롭게' in question_text and '의견' in question_text
 
-        # 2) 실제 응답(빈값/NaN 제외)
-        ser   = df[col].dropna().astype(str)
-        total = len(ser)
-        if total == 0:
-            continue
+        ser_full = df[col].dropna().astype(str)
+        total_full = len(ser_full)
 
-        # 3) value_counts() → count + pct
-        for resp, cnt in ser.value_counts().items():
+        # 개별 응답 잡음 여부 판단 → 결과 기록
+        for resp, cnt in ser_full.value_counts().items():
+            noisy = is_noise_extended(resp, is_free=is_free_opinion)
             results.append({
                 'column_id': col,
-                'question':   def_df.loc[def_df['column_id']==col, '컬럼'].iat[0],
+                'question':   question_text,
                 'field':      'text_simple',
-                'response':   resp,
+                'original_response': resp,
+                'is_noise':   noisy,
                 'count':      int(cnt),
-                'total':      total,
-                'pct':        cnt/total*100
+                'total':      total_full,
+                'pct':        cnt / total_full * 100
             })
     return pd.DataFrame(results)
+
 
 def summarize_open_ended(df: pd.DataFrame, def_df: pd.DataFrame) -> pd.DataFrame:
     df_etc  = summarize_etc(df, def_df)

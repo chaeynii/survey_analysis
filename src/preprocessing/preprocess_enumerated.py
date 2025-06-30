@@ -1,3 +1,5 @@
+'''열거형 문항 처리'''
+
 from src.config.common_imports import *
 
 def preprocess_enumerated(df: pd.DataFrame, def_df: pd.DataFrame) -> None:
@@ -45,3 +47,5 @@ def preprocess_enumerated(df: pd.DataFrame, def_df: pd.DataFrame) -> None:
                 df[col] = pd.Categorical(ser, categories=opts)
             else:
                 df[col] = ser
+                
+    return df
