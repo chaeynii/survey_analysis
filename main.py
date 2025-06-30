@@ -16,8 +16,8 @@ def main():
     objective.to_excel(Path(PROCESSED).parent / 'objective_summary.xlsx', index=False)
 
     # 주관식 / 기타 문항
-    open_ended = summarize_open_ended(df_processed, def_df)
-    print(f"잡음 응답수 : {open_ended['is_noise'].sum()}")
+    df_clean = mark_noise(df_processed, def_df)
+    open_ended = summarize_open_ended(df_clean, def_df)
 
     open_ended.to_excel(Path(PROCESSED).parent / 'open_ended_summary.xlsx', index=False)
 
