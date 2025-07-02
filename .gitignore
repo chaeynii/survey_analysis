@@ -1,4 +1,9 @@
+.env
 data/
 output/
 venv
 noise_config.yaml
+settings.py
+correction_maps/
+reports/
+logs/

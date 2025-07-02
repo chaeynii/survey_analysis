@@ -1,6 +1,6 @@
 '''열거형 문항 처리'''
 
-from src.config.common_imports import *
+from config.common_imports import *
 
 def preprocess_enumerated(df: pd.DataFrame, def_df: pd.DataFrame) -> None:
     for _, r in def_df.iterrows():

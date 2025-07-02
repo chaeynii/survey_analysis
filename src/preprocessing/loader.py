@@ -1,4 +1,7 @@
-from src.config.common_imports import *
+from config.common_imports import *
+from config.logging_config import setup_logging
+
+logger = setup_logging("logs.log")
 
 def load_definitions(path: str) -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name='Sheet1', dtype=str).fillna('')
@@ -26,3 +29,17 @@ def convert_dtypes(df: pd.DataFrame, def_df: pd.DataFrame) -> None:
         elif dtype == 'text':
             df[col] = df[col].astype(str)
     return df
+
+def main():
+    try:
+        def_df = load_definitions(DEF_PATH)
+        df_raw = load_raw_and_rename(RAW_PATH, def_df)
+        df = convert_dtypes(df_raw, def_df)
+        return df, def_df
+
+    except Exception as e:
+        logger.error("로드 중 오류 발생:", e, file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

@@ -1,8 +1,9 @@
-from src.config.common_imports import *
-from src.config.settings import BASE_DIR, EXCLUDE_COLUMNS
+from config.common_imports import *
+from config.settings import BASE_DIR, EXCLUDE_COLUMNS
+from utils.file_utils import load_yaml
+from analysis.summarize_open_ended import get_open_ended_columns
 
-with open(BASE_DIR / 'src/config/noise_config.yaml', encoding="utf-8") as f:
-    noise_config = yaml.safe_load(f)
+noise_config = load_yaml(BASE_DIR / 'src/config/noise_config.yaml')
 
 EXACT_NOISE_RESPONSES = set(noise_config.get('exact', [])) # exact 응답 set
 COMMON_NOISE_PATTERNS = [re.compile(p) for p in noise_config.get('regex_common', [])] # 정규식 컴파일

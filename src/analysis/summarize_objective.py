@@ -1,4 +1,4 @@
-from src.config.common_imports import *
+from config.common_imports import *
 
 def _get_opts(raw_list: str):
     return next(csv.reader([raw_list], delimiter=',', quotechar='"', skipinitialspace=True))
@@ -60,25 +60,3 @@ def summarize_objective(df: pd.DataFrame, def_df: pd.DataFrame) -> pd.DataFrame:
     single = summarize_single(df, def_df)
     multi  = summarize_multi(df, def_df)
     return pd.concat([single, multi], ignore_index=True)
-
-def main():
-    df = pd.read_excel(PROCESSED, dtype=object)
-    def_df = (
-        pd.read_excel(DEF_PATH, sheet_name='Sheet2', dtype=str)
-          .fillna('')
-          .rename(columns={
-              'enumerated_strict(TRUE인 경우, 값 목록 외의 값은 모두 "기타"로 분류함)': 
-                  'enumerated_strict'
-          })
-    )
-
-    summary = summarize_objective(df, def_df)
-
-    outpath = Path(PROCESSED).parent / 'analysis_summary.xlsx'
-    summary.to_excel(outpath, index=False)
-    print(f"----- 분석 요약 저장: {outpath}")
-    print("\n--- 요약 샘플 ---")
-    print(summary.head(20))
-
-if __name__ == '__main__':
-    main()
